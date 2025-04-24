@@ -112,7 +112,12 @@ def train_with_config(config, args, checkpoint_dir=None):
 
     exp_dir = str(Path(args.cfg).parents[1] / "exp")
     cfg_file_name = os.path.basename(args.cfg).split('.')[0]
-    params_search_dir = f"{exp_dir}/{args.exp_id}-{cfg_file_name}/params_search" # params_search_dir: 存放超参数搜索结果的目录
+
+    param_names_suffix = param_manager.get_parameter_columns()
+    # 拼接参数名，用 _ 连接
+    result_suffix = '_'.join(param_names_suffix) if param_names_suffix else ''
+    
+    params_search_dir = f"{exp_dir}/{args.exp_id}-{cfg_file_name}/params_search={result_suffix}" # params_search_dir: 存放超参数搜索结果的目录
     os.makedirs(params_search_dir, exist_ok=True) # 如果没有则创建（递归创建），如果重复则不创建
 
     # 保存单实验配置文件: config_{trial_id}.yaml
@@ -313,7 +318,14 @@ def main(args):
     # 根据指定的搜索空间、调度器和报告器运行超参数搜索。
     # 返回一个 Analysis 对象，用于分析试验结果。
     cfg_file_name = os.path.basename(args.cfg).split('.')[0]
-    storage_path = os.path.abspath(f"./exp/{args.exp_id}-{cfg_file_name}/params_search") 
+
+    param_names_suffix = param_manager.get_parameter_columns()
+    # 拼接参数名，用 _ 连接
+    result_suffix = '_'.join(param_names_suffix) if param_names_suffix else ''
+    storage_path = os.path.abspath(f"./exp/{args.exp_id}-{cfg_file_name}/params_search={result_suffix}") 
+    # "+"="+f"
+
+
     # tune会在storage_path/name下保存所有的元数据
 
     # 自定义试验目录名
@@ -416,7 +428,7 @@ def main(args):
     # 将最佳检查点中的模型复制到最终路径
     best_trial_id = best_trial.trial_id
     base_dir = f"./exp/{args.exp_id}-{cfg_file_name}"
-    params_search_dir = f"{base_dir}/params_search"
+    params_search_dir = f"{base_dir}/params_search={result_suffix}"
     best_model_dir = best_trial.last_result["model_dir"]
     best_model_src = f"{best_model_dir}/best.pth"  # 假设 train.py 保存最佳模型到这里，实际上不是，检测是否序号对应
     best_model_dst_dir = f"{params_search_dir}/best_pths"

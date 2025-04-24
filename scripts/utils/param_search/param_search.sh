@@ -1,5 +1,5 @@
 #!/bin/bash
-set -x
+#set -x
 
 CONFIG=$1
 EXPID=${2:-"test_unet"}
@@ -71,10 +71,27 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+# 构建 final_yaml
+# 提取 CONFIG_YAML 的基本文件名（去掉 .yaml 扩展）
+# 假设 CONFIG_YAML 和 log_suffix 已定义
+config_dir_config_dir=$(dirname "$CONFIG_YAML")  # 获取目录，例如 ./configs
+base_name_config_yaml=$(basename "$CONFIG_YAML" .yaml)
+final_yaml="${config_dir_config_dir}/${base_name_config_yaml}-${log_suffix}.yaml"
+
+# 复制文件
+if [ -f "$CONFIG_YAML" ]; then
+    cp "$CONFIG_YAML" "$final_yaml" && echo "Copied $CONFIG_YAML to $final_yaml"
+else
+    echo "Error: $CONFIG_YAML does not exist."
+    exit 1
+fi
+
+# 构建 log file
 LOG_FILE="$RAY_LOG_DIR/$log_suffix.log"
 echo "Saving output to log file: $LOG_FILE" >&2
 
 # Run Python command and redirect output (stdout and stderr) to log file
+echo "Ray search is doing ..."
 python ./scripts/utils/param_search/param_search.py \
     --exp-id "${EXPID}" \
     --cfg "${CONFIG}" \

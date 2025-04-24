@@ -7,8 +7,8 @@ import torch
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))# 此处为进入到对应的下列Unet的父目录
 
-from Unet.opt import cfg
-from Unet import builder
+from nfdp.opt import cfg
+from nfdp import builder
 #from ...Unet.opt import cfg
 #from ...Unet import builder
 

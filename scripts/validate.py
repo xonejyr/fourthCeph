@@ -7,13 +7,24 @@ import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import torch
+import importlib
 
+MODULE_NAME = "nfdp"  # 切换时改为 "Unet" 即可
 
-from Unet.opt import opt, cfg, logger
-from Unet.trainer_only import validate
-from Unet import builder
-from Unet.utils import NullWriter
-from Unet.datasets.transforms import get_coord
+# 动态导入模块
+opt_module = importlib.import_module(f"{MODULE_NAME}.opt")
+trainer_module = importlib.import_module(f"{MODULE_NAME}.trainer_only")
+utils_module = importlib.import_module(f"{MODULE_NAME}.utils")
+builder_module = importlib.import_module(f"{MODULE_NAME}.builder")
+
+# 分配变量
+opt = opt_module.opt
+cfg = opt_module.cfg
+logger = opt_module.logger
+validate = trainer_module.validate
+NullWriter = utils_module.NullWriter
+get_coord = utils_module.get_coord
+builder = builder_module
 
 def main():
     main_worker(None, opt, cfg)

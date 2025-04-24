@@ -7,9 +7,16 @@ import numpy as np
 # 若要使用，有以下基础要修改
 # 1. 路径配置: json_path, output_dir
 
+import argparse
+# Set up argument parser
+parser = argparse.ArgumentParser(description='Set yaml file for plot_train_history')
+parser.add_argument('--config_file', type=str, required=True, help='Path to the configuration file')
+# Parse arguments
+args = parser.parse_args()
+
 # the newst version doesn't need setting path directly
 from shared_params_manage import ParamManager
-param_manager = ParamManager()
+param_manager = ParamManager(config_file=args.config_file)
 paths = param_manager.get_paths()
 json_path = paths['json_path']
 output_dir = paths['root_fig_dir']

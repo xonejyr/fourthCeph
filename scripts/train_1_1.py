@@ -17,7 +17,7 @@ import torch.utils.data
 import importlib
 
 # 定义模块名称常量
-MODULE_NAME = "Unet"  # 切换时改为 "Unet" 即可
+MODULE_NAME = "nfdp"  # 切换时改为 "Unet" 即可
 
 # 动态导入模块
 opt_module = importlib.import_module(f"{MODULE_NAME}.opt")
@@ -163,6 +163,7 @@ def main_worker(gpu, opt, cfg, log_file=None):
     
     opt.trainIters = 0
     best_mre, best_sd = 999, 999
+    best_mre_mre, best_mre_sd = 999, 999
 
     # 将模型snapshot保存到指定目录
     if opt.model_dir is not None:
@@ -247,17 +248,17 @@ def main_worker(gpu, opt, cfg, log_file=None):
                                './exp/{}-{}/best.pth'.format(opt.exp_id, cfg.FILE_NAME)) # here no distributive learning is used, just m.state_dict()
                     best_mre = mre
                     best_sd = sd
-
+                    logger.info(f'best mean: {best_mre} | best sd: {best_sd} #####')
                 elif best_mre > mre:
                     if opt.model_dir is not None:
                         torch.save(m.state_dict(), f"{opt.model_dir}/best_mre.pth") # for param_search
                     else:
                         torch.save(m.state_dict(),
                                './exp/{}-{}/best_mre.pth'.format(opt.exp_id, cfg.FILE_NAME)) # here no distributive learning is used, just m.state_dict()
-                    best_mre = mre
-                    best_sd = sd
-
-                logger.info(f'best mean: {best_mre} | best sd: {best_sd} #####')
+                    best_mre_mre = mre
+                    best_mre_sd = sd
+                    logger.info(f'best_mre mean: {best_mre_mre} | best_mre sd: {best_mre_sd} #####')
+                
             logger.info(f'final mean: {mre} | final sd: {sd} #####')
 
         # 记录到 CSV,如果

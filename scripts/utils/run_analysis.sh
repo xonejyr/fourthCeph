@@ -12,6 +12,8 @@ CONFIG_NAME="${CONFIG_NAME_WITH_YAML%%.*}"
 
 # Path to shared params yaml file
 SHARED_PARAMS_YAML="./scripts/utils/shared_params.yaml"
+ABSOLUTE_PATH=$(pwd)
+sed -i "s|root_dir:.*|root_dir: $ABSOLUTE_PATH|" "$SHARED_PARAMS_YAML"
 
 # Directory to store temporary YAML files
 TEMP_YAML_DIR="./configs/search_yamls"
@@ -29,7 +31,7 @@ create_and_update_yaml() {
 
     if [ -z "$new_yaml" ]; then
         # If new_yaml is not provided, create a new file by copying SHARED_PARAMS_YAML
-        final_yaml="$TEMP_YAML_DIR/search-${exp_name}-${dataset}-${timestamp}.yaml"
+        final_yaml="$TEMP_YAML_DIR/search-${exp_name}-${dataset}.yaml"
         cp "$SHARED_PARAMS_YAML" "$final_yaml"
         echo "Created new YAML file: $final_yaml" >&2
     else
