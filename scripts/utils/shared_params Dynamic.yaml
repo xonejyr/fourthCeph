@@ -1,0 +1,39 @@
+base:
+  experiment_name: train_ce_hm_HeatmapBasisNFR-512x512_HeatmapBasisNFR_ce_heatmap_RLE
+  model_visualization_dir: Unet/models/visualizations/
+  root_dir: /home/jingyu/Projects/python/vscode/Jingyu/Landmark/secondCeph
+  val_dataset: test
+search_space:
+  NUM_BASES:
+    cfg_path: MODEL.NUM_BASES
+    type: choice
+    values:
+    - 1
+    - 2
+    - 3
+    - 4
+    - 5
+    - 6
+    - 7
+    - 8
+    - 9
+    - 10
+    - 11
+    - 12
+    - 13
+    - 14
+    - 15
+    - 16
+    - 17
+    - 18
+    - 19
+    - 20
+  KL_WEIGHT:
+    cfg_path: MODEL.KL_WEIGHT
+    type: choice
+    values:
+    - 0.1
+    - 0.01
+    - 0.001
+sort_by_importance:
+- NUM_BASES
