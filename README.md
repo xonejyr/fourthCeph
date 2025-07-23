@@ -10,9 +10,12 @@ nohup your_command > /dev/null 2>&1 & #不保留结果
 ###############################################
 # test
 ./scripts/train_and_val.sh ./configs/512x512_res18_ce_heatmap_NFDP.yaml train_NFDP
+./scripts/train_and_val.sh ./configs/512x512_res18_ce_heatmap_NFDP_logQ.yaml train_NFDP
 ./scripts/train_and_val.sh ./configs/512x512_res18_ce_heatmap_NFDP_noRes.yaml train_NFDP
+./scripts/train_and_val.sh ./configs/512x512_res18_ce_heatmap_NFDP_lrArticle.yaml train_NFDP
+./scripts/train_and_val.sh ./configs/512x512_res18_ce_heatmap_NFDP_lr001.yaml train_NFDP
 
-./scripts/utils/param_search/param_search.sh ./configs/512x512_NFDP_ce_heatmap_test.yaml tv_test 2 ./configs/search_yamls/search-tv_test-512x512_NFDP_ce_heatmap-val.yaml
+./scripts/utils/param_search/param_search.sh ./configs/512x512_NFDP_ce_heatmap.yaml tv_test 2 ./configs/search_yamls/train_NFDP-512x512_NFDP_ce_heatmap-val.yaml
 ###############################################
 
 
@@ -40,4 +43,11 @@ python ./scripts/utils/model_visualize.py
 
 # test the shared_params_manage.py
 python ./scripts/utils/shared_params_manage.py
+```
+
+
+####################################################################
+# 2025.5.26 test for L1 and L2
+```bash
+./scripts/visualization_pred_heatmap.sh ./configs/512x512_res18_ce_heatmap_NFDP_again.yaml ./exp/train_NFDP-512x512_res18_ce_heatmap_NFDP_again/best.pth train_NFDP
 ```

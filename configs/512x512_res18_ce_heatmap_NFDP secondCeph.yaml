@@ -53,6 +53,8 @@ DATASET:
       IMG_PREFIX: RawImage/Test1Data
   TYPE: Dataset_ISBI
 LOSS:
+  BASENUMBER: 20
+  MASK_TYPE: pow
   TYPE: RLELoss
   RESIDUAL: true
 MODEL:
@@ -60,9 +62,9 @@ MODEL:
   IN_CHANNELS: 3
   NUM_LAYERS: 18
   PRETRAINED: ''
-  PRETRAINED_RIGHT: true # whether the model is pretrained or not
+  PRETRAINED_RIGHT: true
   TRY_LOAD: ''
-  TYPE: HeatmapNFR
+  TYPE: NFDP_HM
   NUM_FC_FILTERS:
   - -1
 TRAIN:
@@ -79,7 +81,7 @@ TRAIN:
     TYPE: linearLR
     T_MAX: 300
   OPTIMIZER: adam
-  WORLD_SIZE: 2
+  WORLD_SIZE: 2 
 VALIDATE:
   RADII:
   - 2.0

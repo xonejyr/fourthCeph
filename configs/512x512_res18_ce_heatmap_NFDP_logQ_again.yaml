@@ -53,7 +53,7 @@ DATASET:
       IMG_PREFIX: RawImage/Test1Data
   TYPE: Dataset_ISBI
 LOSS:
-  TYPE: RLELoss
+  TYPE: RLELoss_logQ
   RESIDUAL: true
 MODEL:
   HIDDEN_LIST: -1

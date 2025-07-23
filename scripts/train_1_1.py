@@ -255,9 +255,10 @@ def main_worker(gpu, opt, cfg, log_file=None):
                     else:
                         torch.save(m.state_dict(),
                                './exp/{}-{}/best_mre.pth'.format(opt.exp_id, cfg.FILE_NAME)) # here no distributive learning is used, just m.state_dict()
-                    best_mre_mre = mre
-                    best_mre_sd = sd
-                    logger.info(f'best_mre mean: {best_mre_mre} | best_mre sd: {best_mre_sd} #####')
+                    best_mre = mre
+                    best_sd = sd
+
+                logger.info(f'best_mre mean: {best_mre} | best_mre sd: {best_sd} #####')
                 
             logger.info(f'final mean: {mre} | final sd: {sd} #####')
 

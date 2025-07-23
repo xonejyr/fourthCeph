@@ -189,5 +189,5 @@ def process_csv_directory(csv_dir):
             plot_dual_axis_metrics_withAnnotation(csv_path, png_dir)
 
 # 示例调用
-csv_directory = '/home/jingyu/Projects/python/vscode/Jingyu/Landmark/secondCeph/exp/train_ce_hm_HeatmapBasisNFR-512x512_HeatmapBasisNFR_ce_heatmap/params_search/history_csv'  # 替换为你的 history_csv 目录路径
-process_csv_directory(csv_directory)
+#csv_directory = '/home/jingyu/Projects/python/vscode/Jingyu/Landmark/secondCeph/exp/train_ce_hm_HeatmapBasisNFR-512x512_HeatmapBasisNFR_ce_heatmap/params_search/history_csv'  # 替换为你的 history_csv 目录路径
+#process_csv_directory(csv_directory)

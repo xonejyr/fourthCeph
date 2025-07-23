@@ -73,9 +73,9 @@ TRAIN:
     ENABLED: true
     MAX_NORM: 1
     NORM_TYPE: 2
-  LR: 0.0004
+  LR: 0.00001
   LR_SCHEDULE:
-    END_FACTOR: 0.01
+    END_FACTOR: 0.0008
     TYPE: linearLR
     T_MAX: 300
   OPTIMIZER: adam
