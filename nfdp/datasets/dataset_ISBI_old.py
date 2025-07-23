@@ -14,7 +14,7 @@ import torch
 # custom dataset and dataloader
 from .transform_data import Transform
 import torch
-from ..utils import scale_to_targetsize, get_center_scale, affine_transform, get_affine_transform
+from ..utils import scale_to_targetsize
 
 from ..builder import DATASET
 from .. import builder
@@ -77,194 +77,25 @@ class Dataset_ISBI(data.Dataset):
             self._scale_factor = self._preset_cfg['TRAIN']['AUG']['SCALE_FACTOR']
             self._rot = self._preset_cfg['TRAIN']['AUG']['ROT_FACTOR']
             self._shift = self._preset_cfg['TRAIN']['AUG']['SHIFT_FACTOR']
-            self._use_noise = self._preset_cfg['TRAIN']['AUG'].get('USE_NOISE', False)
-            self.use_clahe = self._preset_cfg['TRAIN']['AUG'].get('USE_CLAHE', False)
-            self.use_artifacts = self._preset_cfg['TRAIN']['AUG'].get('USE_ARTIFACTS', False)
         else:
             self._scale_factor = 0
             self._rot = 0
             self._shift = (0, 0)
-            self._use_noise = False
-            self.use_clahe = self._preset_cfg['TRAIN']['AUG'].get('USE_CLAHE', False)
-            self.use_artifacts = self._preset_cfg['TRAIN']['AUG'].get('USE_ARTIFACTS', False)
-
-        self.use_prior_heatmaps = self._preset_cfg['TRAIN']['AUG'].get('USE_PRIOR_HEATMAPS', False)
-
 
         self._input_size = self._preset_cfg['IMAGE_SIZE']
         self._output_size = self._preset_cfg['HEATMAP_SIZE']
-        self._raw_image_size = self._preset_cfg['RAW_IMAGE_SIZE'] # for PseudoMultimodal dataset
         self._sigma = self._preset_cfg['SIGMA']
-        self._feat_stride = np.array(self._input_size) / np.array(self._output_size)
-        self._feat_stride_raw2hm = np.array(self._raw_image_size) / np.array(self._output_size)
 
         self._train = self.subset == 'train'
-
-        self.global_prior_heatmaps = None
-
-        self.img_ids = sorted(os.listdir(self.img_dir))
-
-        self.use_lfp = self._preset_cfg['TRAIN']['AUG'].get('USE_LFP', False)
-        if self.use_lfp:
-            self.joint_distributions = self._compute_landmark_distributions()
-
 
         self.transformation = Transform(
             self, scale_factor=self._scale_factor,
             input_size=self._input_size, # IMAGE_SIZE
             output_size=self._output_size, # HEATMAP_SIZE
             rot=self._rot, sigma=self._sigma,
-            train=self._train, shift=self._shift, bone_indices=self.bone_indices, soft_indices=self.soft_indices, use_noise=self._use_noise, use_clahe=self.use_clahe, use_artifacts=self.use_artifacts, use_lfp=self.use_lfp, joint_distributions=self.joint_distributions)
+            train=self._train, shift=self._shift, bone_indices=self.bone_indices, soft_indices=self.soft_indices)
 
-        
-
-        # 加载或生成global_prior_heatmaps
-        if self.use_prior_heatmaps:
-            prior_file = os.path.join(self._root, 'prior_heatmaps.pth')
-            if os.path.exists(prior_file):
-                self.global_prior_heatmaps = torch.load(prior_file)
-            else:
-                raise FileNotFoundError(f"Prior heatmaps not found at {prior_file}. Please ensure it has been generated.")
-                    
-    def _compute_landmark_distributions(self):
-        """
-        Compute per-joint landmark distribution (mean and covariance matrix) across dataset.
-        Only use visible joints.
-        """
-        all_landmarks = {j: [] for j in range(self.num_joints)}  # key: joint index, value: list of [x, y]
-    
-        for idx in range(len(self)):
-            joints = self.load_annotation(idx)  # shape: [num_joints, 2, 2]
-    
-            for j in range(self.num_joints):
-                vis = joints[j, 0, 1]
-                if vis > 0.5:  # visible
-                    x = joints[j, 0, 0]
-                    y = joints[j, 1, 0]
-                    all_landmarks[j].append([x, y])
-    
-        joint_distributions = {}
-    
-        for j in range(self.num_joints):
-            coords = np.array(all_landmarks[j])  # shape: [N_j, 2]
-    
-            if coords.shape[0] < 2:
-                print(f"Warning: Joint {j} has less than 2 visible samples.")
-                mu = np.zeros(2)
-                sigma = np.eye(2)
-            else:
-                mu = np.mean(coords, axis=0)       # [2]
-                sigma = np.cov(coords.T)           # [2, 2]
-                sigma += np.eye(2) * 1e-6          # for numerical stability
-    
-            joint_distributions[j] = {'mu': mu, 'sigma': sigma}
-        return joint_distributions
-    
-
-
-    def _target_generator(self, joints_ed, num_joints):
-        """
-        build the heatmap of HEATMAP_SIZE from the joints_ed of IMAGE_SIZE
-        sigma is of HEATMAP_SIZE
-
-        args:
-            joints_ed: the joints corresponding to the IMAGE_SIZE
-            num_joints: number of joints
-        outputs:
-            target torch.Size([num_joints, hm_h, hm_w])
-            joints_hmSize torch.Size([num_joints, 2]) the joints of HEATMAP_SIZE
-        """ 
-        target_weight = np.ones((num_joints, 1), dtype=np.float32)
-        target_weight[:, 0] = joints_ed[:, 0, 1]
-        target = np.zeros((num_joints, self._output_size[0], self._output_size[1]),
-                          dtype=np.float32)
-        tmp_size = 1 #self._sigma * 3
-
-        # build the joints of heatmapsize
-        joints_hmSize = np.zeros((num_joints, 2), dtype=np.float32)
-
-        ###################################################################
-        # trans from raw image size to heatmap size
-        imgwidth, imght = self._raw_image_size # raw size of the image
-        self._aspect_ratio = float(self._input_size[1]) / self._input_size[0] # w / h # raw image size and target_ratio
-
-        center, scale = get_center_scale(
-            imgwidth, imght, self._aspect_ratio, scale_mult=1.25) # get src center and scale
-
-        trans = get_affine_transform(center, scale, 0, self._input_size, inv=0) # get trans from src to target
-
-
-        for i in range(num_joints):
-            if joints_ed[i, 0, 1] > 0.0:
-                joints_ed[i, 0:2, 0] = affine_transform(joints_ed[i, 0:2, 0], trans) # get the joints in target size
-            
-
-            mu_x = int(joints_ed[i, 0, 0] / self._feat_stride[0] + 0.5) #+0.5, 四舍五入, IMAGE_SIZE to HEATMAP_SIZE
-            mu_y = int(joints_ed[i, 1, 0] / self._feat_stride[1] + 0.5)
-
-            
-
-            joints_hmSize[i, 0] = mu_x
-            joints_hmSize[i, 1] = mu_y
-
-            # check if any part of the gaussian is in-bounds
-            ul = [int(mu_x - tmp_size), int(mu_y - tmp_size)]
-            br = [int(mu_x + tmp_size + 1), int(mu_y + tmp_size + 1)]
-            if (ul[0] >= self._output_size[1] or ul[1] >= self._output_size[0] or br[0] < 0 or br[1] < 0):
-                # return image as is
-                target_weight[i] = 0
-                continue
-
-            # generate gaussian
-            size = 2 * tmp_size + 1
-            x = np.arange(0, size, 1, np.float32)
-            y = x[:, np.newaxis]
-            x0 = y0 = size // 2
-            # the gaussian is not normalized, we want the center value to be equal to 1
-            g = np.exp(-((x - x0) ** 2 + (y - y0) ** 2) / (2 * (self._sigma ** 2)))
-
-            # usable gaussian range
-            g_x = max(0, -ul[0]), min(br[0], self._output_size[1]) - ul[0]
-            g_y = max(0, -ul[1]), min(br[1], self._output_size[0]) - ul[1]
-            # image range
-            img_x = max(0, ul[0]), min(br[0], self._output_size[1])
-            img_y = max(0, ul[1]), min(br[1], self._output_size[0])
-
-            v = target_weight[i]
-            if v > 0.5:
-                target[i, img_y[0]:img_y[1], img_x[0]:img_x[1]] = g[g_y[0]:g_y[1], g_x[0]:g_x[1]]
-
-        return target, np.expand_dims(target_weight, -1), joints_hmSize
-
-    def _generate_global_prior_heatmaps(self):
-        hm_size = self._output_size
-        prior_heatmaps = np.zeros((self.num_joints, 1, hm_size[0], hm_size[1]), dtype=np.float32)
-        weights_sum = np.zeros(self.num_joints, dtype=np.float32)
-        
-        all_coords = [self.load_annotation(idx)[:, :, 0] for idx in range(len(self.img_ids))] # of rawImageSize
-        all_coords = np.stack(all_coords, axis=0)
-        # mean_coords = np.mean(all_coords, axis=0)
-        # std_coords = np.std(all_coords, axis=0) + 1e-9
-        # valid_mask = np.all(np.abs(all_coords - mean_coords) < 3 * std_coords, axis=-1)
-
-        #indices = np.random.choice(len(self.img_ids), size=min(1000, len(self.img_ids)), replace=False)
-
-        indices = range(len(self.img_ids))
-
-        for idx in indices:
-            joints_ed = self.load_annotation(idx)
-
-            target, target_weight, _ = self._target_generator(joints_ed.copy(), self.num_joints)
-            for j in range(self.num_joints):
-                #if target_weight[j, 0, 0] > 0.5 and valid_mask[idx, j]:
-                    prior_heatmaps[j, 0] += target[j]
-                    weights_sum[j] += 1
-
-        for j in range(self.num_joints):
-            if weights_sum[j] > 0:
-                prior_heatmaps[j, 0] /= weights_sum[j]
-                prior_heatmaps[j, 0] /= (prior_heatmaps[j, 0].max() + 1e-9)
-        return torch.tensor(prior_heatmaps) # [1, num_joints, 1, hm_w, hm_h]
+        self.img_ids = sorted(os.listdir(self.img_dir))
 
 
     # load the image of index
@@ -304,13 +135,13 @@ class Dataset_ISBI(data.Dataset):
             lines = f.readlines()
             for i in range(self.num_joints):
                 coordinates = lines[i].replace('\n', '').split(',')
-                coordinates_int = [float(i) for i in coordinates]
+                coordinates_int = [int(i) for i in coordinates]
                 pts1.append(coordinates_int)
         with open(annoFolder2, 'r') as f:
             lines = f.readlines()
             for i in range(self.num_joints):
                 coordinates = lines[i].replace('\n', '').split(',')
-                coordinates_int = [float(i) for i in coordinates]
+                coordinates_int = [int(i) for i in coordinates]
                 pts2.append(coordinates_int)
         pts1 = np.array(pts1)
         pts2 = np.array(pts2)
@@ -332,7 +163,7 @@ class Dataset_ISBI(data.Dataset):
 
         img_id = self.img_ids[index]
         img = self.load_image(index) # [rawImage_height, rawImage_width, 3]
-        joints = self.load_annotation(index) # [num_joints, 2, 2] of rawImageSize
+        joints = self.load_annotation(index) # [num_joints, 2, 2]
 
         label = dict(joints=joints) # key 为 'joints', value is the 3D structure, 没有归一化
         label['width'] = img.shape[1] # 新增项
@@ -342,12 +173,9 @@ class Dataset_ISBI(data.Dataset):
         # this returns a dictionary containing augmented image and labels
         target = self.transformation(img, label) 
 
+
         img = target.pop('image') # so, there would be no 'image' in the target anymore
         # print(img.shape)
-
-        # if self.global_prior_heatmaps is not None and self.use_prior_heatmaps:
-        #     target['global_target_hm'] = self.global_prior_heatmaps.clone().unsqueeze(0).to(img.device) # [1, 19, 1, hm_w, hm_h]
- 
         return img, target, img_id
         # img [C, H, W] here the H, W are resized
         # target a dict {type, target_hm, target_hm_weights, target_uv, target_uv_weights}
@@ -423,12 +251,10 @@ class Dataset_ISBI_PseudoMultimodal(data.Dataset):
             self._scale_factor = self._preset_cfg['TRAIN']['AUG']['SCALE_FACTOR']
             self._rot = self._preset_cfg['TRAIN']['AUG']['ROT_FACTOR']
             self._shift = self._preset_cfg['TRAIN']['AUG']['SHIFT_FACTOR']
-            self._use_noise = self._preset_cfg['TRAIN']['AUG'].get('USE_NOISE', False)
         else:
             self._scale_factor = 0
             self._rot = 0
             self._shift = (0, 0)
-            self._use_noise = False
 
         self._input_size = self._preset_cfg['IMAGE_SIZE']
         self._output_size = self._preset_cfg['HEATMAP_SIZE']
@@ -441,7 +267,7 @@ class Dataset_ISBI_PseudoMultimodal(data.Dataset):
             input_size=self._input_size, # IMAGE_SIZE
             output_size=self._output_size, # HEATMAP_SIZE
             rot=self._rot, sigma=self._sigma,
-            train=self._train, shift=self._shift, bone_indices=self.bone_indices, soft_indices=self.soft_indices,use_noise=self._use_noise)
+            train=self._train, shift=self._shift, bone_indices=self.bone_indices, soft_indices=self.soft_indices)
 
         self.img_ids = sorted(os.listdir(self.img_dir))
 
@@ -483,13 +309,13 @@ class Dataset_ISBI_PseudoMultimodal(data.Dataset):
             lines = f.readlines()
             for i in range(self.num_joints):
                 coordinates = lines[i].replace('\n', '').split(',')
-                coordinates_int = [float(i) for i in coordinates]
+                coordinates_int = [int(i) for i in coordinates]
                 pts1.append(coordinates_int)
         with open(annoFolder2, 'r') as f:
             lines = f.readlines()
             for i in range(self.num_joints):
                 coordinates = lines[i].replace('\n', '').split(',')
-                coordinates_int = [float(i) for i in coordinates]
+                coordinates_int = [int(i) for i in coordinates]
                 pts2.append(coordinates_int)
         pts1 = np.array(pts1)
         pts2 = np.array(pts2)

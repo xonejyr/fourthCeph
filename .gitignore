@@ -7,3 +7,4 @@ Unet/models/visualizations/
 *.out
 nohup.out
 path/
+logs/

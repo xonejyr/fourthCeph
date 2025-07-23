@@ -55,46 +55,6 @@ def im_to_torch(img):
         img /= 255
     return img
 
-from skimage.exposure import equalize_adapthist
-
-def im_to_torch_clahe(img, clip_limit=0.02, tile_grid_size=(8, 8)):
-    """Transform ndarray image to torch tensor with CLAHE preprocessing.
-
-    Parameters
-    ----------
-    img: numpy.ndarray
-        An ndarray with shape: `(H, W, 3)`. This is how an image looks like in OpenCV.
-    clip_limit: float, optional
-        Clipping limit for CLAHE, normalized between 0 and 1. Default is 0.02.
-    tile_grid_size: tuple of int, optional
-        Size of the tile grid for CLAHE. Default is (8, 8).
-
-    Returns
-    -------
-    torch.Tensor
-        A tensor with shape: `(3, H, W)`.
-
-    """
-    # Normalize image to [0, 1] if not already normalized
-    if img.max() > 1:
-        img = img / 255.0
-    
-    # Apply CLAHE to the first channel only
-    img_clahe_single = equalize_adapthist(
-        img[:, :, 0], 
-        clip_limit=clip_limit, 
-        nbins=256, 
-        kernel_size=tile_grid_size
-    )
-    
-    # Replicate the processed channel across all channels
-    img_clahe = np.repeat(img_clahe_single[:, :, np.newaxis], img.shape[2], axis=2)
-    
-    # Transpose to (C, H, W) and convert to torch tensor
-    img_clahe = np.transpose(img_clahe, (2, 0, 1))
-    img_tensor = torch.from_numpy(img_clahe).float()
-    
-    return img_tensor
 
 def torch_to_im(img):
     """Transform torch tensor to ndarray image.
@@ -172,10 +132,8 @@ def heatmap_to_coord_simple(hms, bbox, **kwargs):
     # post-processing
     for p in range(coords.shape[0]):
         hm = hms[p]
-        #px = int(round(float(coords[p][0])))
-        #py = int(round(float(coords[p][1])))
-        px = float(coords[p][0])
-        py = float(coords[p][1])
+        px = int(round(float(coords[p][0])))
+        py = int(round(float(coords[p][1])))
         if 1 < px < hm_w - 1 and 1 < py < hm_h - 1:
             diff = np.array((hm[py][px + 1] - hm[py][px - 1],
                              hm[py + 1][px] - hm[py - 1][px]))
@@ -208,8 +166,8 @@ def heatmap_to_coord_medical(hms, **kwargs):
     # post-processing, 利用梯度信息对峰值坐标进行细化（如亚像素精度）。
     for p in range(coords.shape[0]):
         hm = hms[p]
-        px = float(coords[p][0])
-        py = float(coords[p][1])
+        px = int(round(float(coords[p][0])))
+        py = int(round(float(coords[p][1])))
         if 1 < px < hm_w - 1 and 1 < py < hm_h - 1:
             diff = np.array((hm[py][px + 1] - hm[py][px - 1],
                              hm[py + 1][px] - hm[py - 1][px]))
@@ -536,24 +494,14 @@ class Expand(object):
         ratio = random.uniform(1, self.max_scale)
         y1 = random.uniform(0, h * ratio - h)
         x1 = random.uniform(0, w * ratio - w)
-        #if np.max(pts[:, 0]) + int(x1) > w - 1 or np.max(pts[:, 1]) + int(y1) > h - 1:  # keep all the pts
-        if np.max(pts[:, 0]) + x1 > w - 1 or np.max(pts[:, 1]) + y1 > h - 1:  # keep all the pts
+        if np.max(pts[:, 0]) + int(x1) > w - 1 or np.max(pts[:, 1]) + int(y1) > h - 1:  # keep all the pts
             return img, pts
         else:
-            ## has int
-            #expand_img = np.zeros(shape=(int(h * ratio), int(w * ratio), c), dtype=img.dtype)
-            #expand_img[:, :, :] = self.mean
-            #expand_img[int(y1):int(y1 + h), int(x1):int(x1 + w)] = img
-            #pts[:, 0] += int(x1)
-            #pts[:, 1] += int(y1)
-            #return expand_img, pts
-        
-            # no int
-            expand_img = np.zeros(shape=(h * ratio, w * ratio, c), dtype=img.dtype)
+            expand_img = np.zeros(shape=(int(h * ratio), int(w * ratio), c), dtype=img.dtype)
             expand_img[:, :, :] = self.mean
-            expand_img[y1:y1 + h, x1:x1 + w] = img
-            pts[:, 0] += x1
-            pts[:, 1] += y1
+            expand_img[int(y1):int(y1 + h), int(x1):int(x1 + w)] = img
+            pts[:, 0] += int(x1)
+            pts[:, 1] += int(y1)
             return expand_img, pts
 
 
@@ -589,7 +537,6 @@ class RandomSampleCrop(object):
                     continue
                 y1 = random.uniform(height - h)
                 x1 = random.uniform(width - w)
-                #rect = np.array([int(y1), int(x1), int(y1 + h), int(x1 + w)])
                 rect = np.array([int(y1), int(x1), int(y1 + h), int(x1 + w)])
                 current_img = current_img[rect[0]:rect[2], rect[1]:rect[3], :]
                 current_pts[:, 0, 0] -= rect[1]

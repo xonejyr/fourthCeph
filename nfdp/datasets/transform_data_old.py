@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 import torch
 from ..utils import get_center_scale, split_targets, split_heatmaps
-from .transforms import affine_transform, get_affine_transform, im_to_torch, im_to_torch_clahe, Compose, \
+from .transforms import affine_transform, get_affine_transform, im_to_torch, Compose, \
     ConvertImgFloat, PhotometricDistort, RandomSampleCrop
 
 
@@ -46,20 +46,17 @@ class Transform(object):
 
     def __init__(self, dataset, scale_factor,
                  input_size, output_size, rot, sigma,
-                 train, loss_type='heatmap', shift=(0, 0), bone_indices=None, soft_indices=None, use_noise=False, use_clahe=False, use_artifacts=False, use_lfp=None, joint_distributions=None):
+                 train, loss_type='heatmap', shift=(0, 0), bone_indices=None, soft_indices=None):
         self._scale_factor = scale_factor
         self._rot = rot
         self.shift = shift
-        self.use_noise = use_noise
-        self.use_clahe = use_clahe
-        self.use_artifacts = use_artifacts
         self._input_size = input_size  # preset input size, not the size of the exact image
         self._heatmap_size = output_size
         # self.shift =
         self._sigma = sigma
         self._train = train
         self._loss_type = loss_type
-        self._aspect_ratio = float(input_size[1]) / input_size[0] # w / h
+        self._aspect_ratio = float(input_size[1]) / input_size[0]  # w / h
         self._feat_stride = np.array(input_size) / np.array(output_size)
         self.imgwidth = input_size[1]
         self.imght = input_size[0]
@@ -68,9 +65,6 @@ class Transform(object):
         self.process = Preprocessing()
         self.bone_indices = bone_indices
         self.soft_indices = soft_indices
-
-        self.use_lfp = use_lfp
-        if self.use_lfp: self.joint_distributions = joint_distributions
 
     def test_transform(self, src):
 
@@ -196,56 +190,8 @@ class Transform(object):
 
         return cropped_1, cropped_2, cropped_3
 
-    def _apply_lfp(self, src, landmark_coords):
-        """
-        src: 原图，float32, shape (H, W, 3), 值域 0~255
-        landmark_coords: [num_joints, 2]，原图坐标系下的 (x, y)
-        """
-        img = src.copy()
-        H, W, _ = img.shape
-
-        k = 3  # 干扰多少个点
-        minRP, maxRP = 20, 60
-        m = 15  # 模糊核大小
-
-        #print("==============================================")
-        #print(f"the shape of landmark_coords is {landmark_coords.shape}")
-        #print(f"the shape[0] of landmark_coords is {landmark_coords.shape[0]}")
-
-        selected_ids = np.random.choice(landmark_coords.shape[0], size=k, replace=False)
-
-        for i in selected_ids:
-            dist_info = self.joint_distributions.get(i, None)
-            if dist_info is None:
-                continue
-
-            mu = dist_info['mu']
-            sigma = dist_info['sigma']
-
-            sampled_point = np.random.multivariate_normal(mu, sigma)
-            xc, yc = int(sampled_point[0]), int(sampled_point[1])
-
-            wi = np.random.randint(minRP, maxRP)
-            hi = np.random.randint(minRP, maxRP)
-
-            x1 = max(xc - wi // 2, 0)
-            y1 = max(yc - hi // 2, 0)
-            x2 = min(xc + wi // 2, W)
-            y2 = min(yc + hi // 2, H)
-
-            patch = img[y1:y2, x1:x2, :]
-            if patch.shape[0] > 0 and patch.shape[1] > 0:
-                patch_blurred = cv2.blur(patch, (m, m))
-                img[y1:y2, x1:x2, :] = patch_blurred
-
-        return img
-
-
     def __call__(self, src, label):
         gt_joints = label['joints']
-        if self._train and self.use_lfp and np.random.rand() > 0.1:
-            src = self._apply_lfp(src, gt_joints[:, 0:2])  # 原图尺度
-
         if self._train:
             src, gt_joints = self.process(src, gt_joints)
 
@@ -303,68 +249,8 @@ class Transform(object):
             joints.copy(), self.num_joints, inp_h, inp_w)
 
         # img = np.clip(img, a_min=0., a_max=255.)
-        
-        if self.use_clahe:
-            img = im_to_torch_clahe(img)
-        else: 
-            img = im_to_torch(img)
-            
+        img = im_to_torch(img)
         img.add_(-0.5)
-
-        if self._train:
-            # 添加伪影（10%）
-            if self.use_artifacts and np.random.rand() < 0.1:
-                #print("================================")
-                #print(f"the shape of img is {img.shape}")
-                # single
-                ## _, H, W = img.shape
-                ## x = np.random.randint(0, W-15)  # 限制位置,small 15
-                ## y = np.random.randint(0, H-15)
-                ## radius = np.random.randint(5, 15) # small 5,15
-                ## intensity = np.random.uniform(0.4, 0.5) # normal 0.4 0.5
-                ## yy, xx = torch.meshgrid(torch.arange(H), torch.arange(W), indexing='ij')
-                ## yy, xx = yy.to(img.device), xx.to(img.device)
-                ## dist = torch.sqrt((xx - x)**2 + (yy - y)**2)
-                ## mask = (dist <= radius).float()
-                ## img += mask * (intensity - img)
-                ## img.clamp_(-0.5, 0.5)
-
-                # multiple
-                _, H, W = img.shape  # 512, 512
-                x = np.random.randint(0, W-15)
-                y = np.random.randint(0, H-15)
-                intensity = np.random.uniform(0.4, 0.5)  # [0.3, 0.5)
-                shape_type = np.random.choice(['circle', 'ellipse', 'stripe'], p=[0.4, 0.3, 0.3])
-                yy, xx = torch.meshgrid(torch.arange(H), torch.arange(W), indexing='ij')
-                yy, xx = yy.to(img.device), xx.to(img.device)
-
-                if shape_type == 'circle':
-                    radius = np.random.randint(20, 41)
-                    dist = torch.sqrt((xx - x)**2 + (yy - y)**2)
-                    sigma = radius / 3
-                    mask = torch.exp(-dist**2 / (2 * sigma**2))
-                elif shape_type == 'ellipse':
-                    a = np.random.randint(20, 41)
-                    b = np.random.randint(10, 31)
-                    dist = torch.sqrt(((xx - x)/a)**2 + ((yy - y)/b)**2)
-                    sigma = min(a, b) / 3
-                    mask = torch.exp(-dist**2 / (2 * sigma**2))
-                else:  # stripe
-                    width = np.random.randint(10, 21)
-                    angle = torch.tensor(np.random.uniform(0, np.pi))
-                    dist = torch.abs((xx - x) * torch.cos(angle) + (yy - y) * torch.sin(angle))
-                    sigma = width / 3
-                    mask = torch.exp(-dist**2 / (2 * sigma**2))
-
-                mask = (mask / mask.max()).float()
-                img += mask * (intensity - img)
-                img.clamp_(-0.5, 0.5)
-
-            # noise
-            if self.use_noise and np.random.rand() < 0.5:
-                noise = torch.randn_like(img) * 0.05
-                img += noise
-                img.clamp_(-0.5, 0.5)
 
         # split bone and soft related
         target_uv_bone, target_uv_soft, target_uv_weight_bone, target_uv_weight_soft = split_targets(target_uv, target_uv_weight, self.bone_indices, self.soft_indices)
